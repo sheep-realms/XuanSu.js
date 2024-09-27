@@ -60,6 +60,12 @@ class XuanSu {
                     method: 'randomQQNumber',
                     parameter: ['max']
                 }
+            }, {
+                name: 'ipv4',
+                data: {
+                    method: 'randomIPv4',
+                    parameter: ['attribute']
+                }
             }
         ];
 
@@ -337,11 +343,23 @@ class XuanSu {
         }
 
         const block = [
-            ['class_a', 1,   126],
-            ['class_b', 128, 191],
-            ['class_c', 192, 223],
+            ['class_a', 1,   126, 2147483520],
+            ['class_b', 128, 191, 1073709056],
+            ['class_c', 192, 223, 532676608],
             ['after',   0,   255]
         ]
+
+        const length = {
+            'class_a': 2147483520,
+            'class_b': 1073709056,
+            'class_c': 532676608
+        };
+
+        const modifier = {
+            'class_a': v => v.replace(/^10/, '11'),
+            'class_b': v => /^(172)\.(1[6-9]|2[0-9]|3[0-1])/.test(v) ? v.replace(/^172/, '173') : v,
+            'class_c': v => v.replace(/^192\.168/, '192.169')
+        };
         
         let pool = {};
         block.forEach(e => {
@@ -354,16 +372,56 @@ class XuanSu {
             }
         });
 
+        pool['class_c_2'] = {
+            type: 'weighted_choose',
+            data: {
+                value: [
+                    {
+                        value: {
+                            is_pool: true,
+                            type: 'int',
+                            data: {
+                                min: 0,
+                                max: 167
+                            }
+                        },
+                        weight: 168
+                    }, {
+                        value: {
+                            is_pool: true,
+                            type: 'int',
+                            data: {
+                                min: 169,
+                                max: 255
+                            }
+                        },
+                        weight: 86
+                    }
+                ]
+            }
+        }
+
         let pools = [];
 
         function __pushToPools(name) {
-            // pools.push([pool[name], pool['after'], pool['after'], pool['after']]);
             pools.push({
-                is_pool: true,
-                type: 'random',
-                data: {
-                    pools: [pool[name], '.', pool['after'], '.', pool['after'], '.', pool['after']]
-                }
+                value: {
+                    is_pool: true,
+                    type: 'random',
+                    data: {
+                        pools: [
+                            pool[name],
+                            '.',
+                            pool['after'],
+                            '.',
+                            pool['after'],
+                            '.',
+                            pool['after']
+                        ]
+                    },
+                    modifier: modifier[name]
+                },
+                weight: length[name],
             });
         }
 
@@ -372,7 +430,7 @@ class XuanSu {
         if (attribute.has_class_c) __pushToPools('class_c');
 
         let p = {
-            type: 'choose',
+            type: 'weighted_choose',
             data: {
                 value: pools
             }
