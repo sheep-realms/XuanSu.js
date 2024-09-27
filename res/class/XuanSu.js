@@ -1,5 +1,60 @@
 class XuanSu {
-    constructor() {}
+    constructor() {
+        let methodRegister = [
+            {
+                name: 'none',
+                data: {
+                    method: v => v.value
+                }
+            }, {
+                name: 'int',
+                data: {
+                    method: 'randomInt',
+                    parameter: ['max', 'min']
+                }
+            }, {
+                name: 'number_id',
+                data: {
+                    method: 'randomNumberID',
+                    parameter: ['length']
+                }
+            }, {
+                name: 'character',
+                data: {
+                    method: 'randomCharacter',
+                    parameter: ['length', 'max', 'min']
+                }
+            }, {
+                name: 'choose',
+                data: {
+                    method: 'choose',
+                    parameter: ['value']
+                }
+            }, {
+                name: 'weighted_choose',
+                data: {
+                    method: 'weightedRandom',
+                    parameter: ['value']
+                }
+            }, {
+                name: 'uuid',
+                data: {
+                    method: 'randomUUID',
+                    parameter: ['version']
+                }
+            }
+        ];
+
+        this.method = new Map();
+
+        methodRegister.forEach(e => {
+            this.method.set(e.name, e.data);
+        });
+    }
+
+    getMethod(name) {
+        return this.method.get(name);
+    }
 
     random(pools = [], seed) {
         if (typeof pools !== 'object') return;
@@ -220,6 +275,9 @@ class XuanSuPool {
     }
 
     run(method = 'none', parameter = []) {
+        if (typeof method === 'function') {
+            return method(this.pool.data, this.seed);
+        }
         if (this.parent[method] === undefined) return;
         let par = []
         parameter.forEach(e => {
@@ -229,30 +287,8 @@ class XuanSuPool {
     }
 
     getValue() {
-        switch (this.pool.type) {
-            case 'none':
-                return this.pool.data?.value;
-
-            case 'int':
-                return this.run('randomInt', ['max', 'min']);
-
-            case 'number_id':
-                return this.run('randomNumberID', ['length']);
-
-            case 'character':
-                return this.run('randomCharacter', ['length', 'max', 'min']);
-
-            case 'choose':
-                return this.run('randomCharacter', ['value']);
-
-            case 'weighted_choose':
-                return this.run('weightedRandom', ['value']);
-
-            case 'uuid':
-                return this.run('randomCharacter', ['version']);
-        
-            default:
-                break;
-        }
+        const methodData = this.parent.getMethod(this.pool.type);
+        if (methodData === undefined) return;
+        return this.run(methodData.method, methodData.parameter);
     }
 }
