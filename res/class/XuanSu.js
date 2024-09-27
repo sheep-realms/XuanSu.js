@@ -6,21 +6,22 @@ class XuanSu {
         if (!Array.isArray(pools)) pools = [pools];
 
         // 归一
+        let pools2 = []
         pools.forEach(e => {
             if (typeof e === 'string' || typeof e === 'number') {
-                e = {
+                pools2.push({
                     type: 'none',
                     data: {
                         value: e
                     }
-                };
+                });
             } else if (typeof e !== 'object' || Array.isArray(e)) {
-                e = {
-                    type: '__deleted__'
-                };
+                // 什么也不干
+            } else {
+                pools2.push(e);
             }
         });
-        pools = pools.filter(e => e.type !== '__deleted__');
+        pools = pools2;
 
         // 构建
         let value = '';
@@ -51,6 +52,11 @@ class XuanSu {
         return seed / m;
     }
 
+    /**
+     * 下一个随机种子
+     * @param {Number} seed 随机种子
+     * @returns {Number} 随机种子
+     */
     nextSeed(seed) {
         const a = 1664525;
         const c = 1013904223;
@@ -77,6 +83,23 @@ class XuanSu {
                 return valueList[i].value;
             }
         }
+    }
+
+    /**
+     * 随机选择
+     * @param {Array} arr 候选值列表
+     * @param {Number} seed 随机种子
+     * @returns {*} 随机选择结果
+     */
+    choose(arr = [], seed) {
+        let list = [];
+        arr.forEach(e => {
+            list.push({
+                value: e,
+                weight: 1
+            });
+        });
+        return this.weightedRandom(list, seed);
     }
 
     /**
@@ -127,7 +150,7 @@ class XuanSu {
         return str;
     }
 
-    randomUUID(ver = 4, seed) {
+    randomUUID(version = 4, seed) {
         return this.random(
             [
                 {
@@ -148,7 +171,7 @@ class XuanSu {
                 }, {
                     type: 'none',
                     data: {
-                        value: `-${ String(ver).substring(0, 1) }`
+                        value: `-${ String(version).substring(0, 1) }`
                     }
                 }, {
                     type: 'character',
@@ -196,19 +219,37 @@ class XuanSuPool {
         this.seed = seed;
     }
 
+    run(method = 'none', parameter = []) {
+        if (this.parent[method] === undefined) return;
+        let par = []
+        parameter.forEach(e => {
+            par.push(this.pool.data[e])
+        });
+        return this.parent[method](...par, this.seed);
+    }
+
     getValue() {
         switch (this.pool.type) {
             case 'none':
                 return this.pool.data?.value;
 
             case 'int':
-                return this.parent.randomInt(this.pool.data.max, this.pool.data.min, this.seed);
+                return this.run('randomInt', ['max', 'min']);
 
             case 'number_id':
-                return this.parent.randomNumberID(this.pool.data.length, this.seed);
+                return this.run('randomNumberID', ['length']);
 
             case 'character':
-                return this.parent.randomCharacter(this.pool.data.length, this.pool.data.max, this.pool.data.min, this.seed);
+                return this.run('randomCharacter', ['length', 'max', 'min']);
+
+            case 'choose':
+                return this.run('randomCharacter', ['value']);
+
+            case 'weighted_choose':
+                return this.run('weightedRandom', ['value']);
+
+            case 'uuid':
+                return this.run('randomCharacter', ['version']);
         
             default:
                 break;
