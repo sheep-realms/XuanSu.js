@@ -7,6 +7,12 @@ class XuanSu {
                     method: v => v.value
                 }
             }, {
+                name: 'random',
+                data: {
+                    method: 'random',
+                    parameter: ['pools']
+                }
+            }, {
                 name: 'int',
                 data: {
                     method: 'randomInt',
@@ -48,6 +54,12 @@ class XuanSu {
                     method: 'randomUUID',
                     parameter: ['version']
                 }
+            }, {
+                name: 'qq_number',
+                data: {
+                    method: 'randomQQNumber',
+                    parameter: ['max']
+                }
             }
         ];
 
@@ -56,6 +68,12 @@ class XuanSu {
         methodRegister.forEach(e => {
             this.method.set(e.name, e.data);
         });
+    }
+
+    static isPool(value = {}) {
+        if (typeof value !== 'object' || Array.isArray(value)) return false;
+        if (value?.is_pool !== true) return false;
+        return true;
     }
 
     getMethod(name) {
@@ -141,7 +159,12 @@ class XuanSu {
         for (let i = 0; i < valueList.length; i++) {
             randomNum -= valueList[i].weight;
             if (randomNum < 0) {
-                return valueList[i].value;
+                let r = valueList[i].value;
+                if (XuanSu.isPool(r)) {
+                    if (this.seed !== undefined) this.seed = this.parent.nextSeed(this.seed);
+                    r = new XuanSuPool(this, r, seed).getValue();
+                }
+                return r;
             }
         }
     }
@@ -171,6 +194,8 @@ class XuanSu {
      * @returns {Number} 随机整数
      */
     randomInt(max = 1, min = 0, seed) {
+        max = max || 1;
+        min = min || 0;
         min = Math.ceil(min);
         max = Math.floor(max);
         return Math.floor(this.seededRandom(seed) * (max - min + 1)) + min;
@@ -184,6 +209,9 @@ class XuanSu {
      * @returns {Number} 随机整数
      */
     normalRandomInt(mean = 0, range = 10, seed) {
+        mean = mean || 0;
+        range = range || 10;
+
         let u1, u2, z0;
         do {
             u1 = this.seededRandom(seed);
@@ -205,6 +233,8 @@ class XuanSu {
      * @returns {String} 随机数字 ID
      */
     randomNumberID(length = 10, seed) {
+        length = length || 10;
+
         let str = '';
         for (let i = 0; i < length; i++) {
             str += this.randomInt(9, 0, seed);
@@ -222,7 +252,13 @@ class XuanSu {
      * @returns {String} 随机数字与字符
      */
     randomCharacter(length = 10, max = 15, min = 0, seed) {
+        length = length || 10;
+        max = max || 15;
+        min = min || 0;
         if (max > 35) max = 35;
+        if (min < 0) min = 0;
+        if (max < min) max = min;
+
         let str = '';
         let r;
         for (let i = 0; i < length; i++) {
@@ -234,6 +270,7 @@ class XuanSu {
     }
 
     randomUUID(version = 4, seed) {
+        version = version || 4;
         return this.random(
             [
                 {
@@ -241,42 +278,22 @@ class XuanSu {
                     data: {
                         length: 8
                     }
-                }, {
-                    type: 'none',
-                    data: {
-                        value: '-'
-                    }
-                }, {
+                }, '-', {
                     type: 'character',
                     data: {
                         length: 4
                     }
-                }, {
-                    type: 'none',
-                    data: {
-                        value: `-${ String(version).substring(0, 1) }`
-                    }
-                }, {
+                }, `-${ String(version).substring(0, 1) }`, {
                     type: 'character',
                     data: {
                         length: 3
                     }
-                }, {
-                    type: 'none',
-                    data: {
-                        value: '-'
-                    }
-                }, {
+                }, '-', {
                     type: 'character',
                     data: {
                         length: 4
                     }
-                }, {
-                    type: 'none',
-                    data: {
-                        value: '-'
-                    }
-                }, {
+                }, '-', {
                     type: 'character',
                     data: {
                         length: 12
@@ -285,6 +302,84 @@ class XuanSu {
             ],
             seed
         )
+    }
+
+    randomQQNumber(max = 4e9, seed) {
+        max = max || 4e9;
+        return this.random(
+            [
+                {
+                    type: 'int',
+                    data: {
+                        max: max,
+                        min: {
+                            is_pool: true,
+                            type: 'normal_int',
+                            data: {
+                                mean: 0,
+                                range: 999
+                            },
+                            modifier: v => 1e9 - Math.abs(v * 1e6)
+                        }
+                    }
+                }
+            ],
+            seed
+        );
+    }
+
+    randomIPv4(attribute = {}, seed) {
+        attribute = {
+            has_class_a: true,
+            has_class_b: true,
+            has_class_c: true,
+            ...attribute
+        }
+
+        const block = [
+            ['class_a', 1,   126],
+            ['class_b', 128, 191],
+            ['class_c', 192, 223],
+            ['after',   0,   255]
+        ]
+        
+        let pool = {};
+        block.forEach(e => {
+            pool[e[0]] = {
+                type: 'int',
+                data: {
+                    min: e[1],
+                    max: e[2]
+                }
+            }
+        });
+
+        let pools = [];
+
+        function __pushToPools(name) {
+            // pools.push([pool[name], pool['after'], pool['after'], pool['after']]);
+            pools.push({
+                is_pool: true,
+                type: 'random',
+                data: {
+                    pools: [pool[name], '.', pool['after'], '.', pool['after'], '.', pool['after']]
+                }
+            });
+        }
+
+        if (attribute.has_class_a) __pushToPools('class_a');
+        if (attribute.has_class_b) __pushToPools('class_b');
+        if (attribute.has_class_c) __pushToPools('class_c');
+
+        let p = {
+            type: 'choose',
+            data: {
+                value: pools
+            }
+        };
+
+        // return p;
+        return this.random(p, seed);
     }
 }
 
@@ -303,12 +398,6 @@ class XuanSuPool {
         this.seed = seed;
     }
 
-    __isPool(value = {}) {
-        if (typeof value !== 'object' || Array.isArray(value)) return false;
-        if (value?.is_pool !== true) return false
-        return true;
-    }
-
     run(method = 'none', parameter = []) {
         if (typeof method === 'function') {
             return method(this.pool.data, this.seed);
@@ -318,7 +407,7 @@ class XuanSuPool {
         let p;
         parameter.forEach(e => {
             p = this.pool.data[e];
-            if (this.__isPool(p)) {
+            if (XuanSu.isPool(p)) {
                 p = new XuanSuPool(this.parent, p, this.seed).getValue();
                 if (this.seed !== undefined) this.seed = this.parent.nextSeed(this.seed);
             }
