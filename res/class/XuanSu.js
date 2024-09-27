@@ -13,6 +13,12 @@ class XuanSu {
                     parameter: ['max', 'min']
                 }
             }, {
+                name: 'normal_int',
+                data: {
+                    method: 'normalRandomInt',
+                    parameter: ['mean', 'range']
+                }
+            }, {
                 name: 'number_id',
                 data: {
                     method: 'randomNumberID',
@@ -171,6 +177,28 @@ class XuanSu {
     }
 
     /**
+     * 正态分布随机整数
+     * @param {Number} mean 均值
+     * @param {Number} range 范围
+     * @param {Number} seed 随机种子
+     * @returns {Number} 随机整数
+     */
+    normalRandomInt(mean = 0, range = 10, seed) {
+        let u1, u2, z0;
+        do {
+            u1 = this.seededRandom(seed);
+            if (seed !== undefined) seed = this.nextSeed(seed);
+            u2 = this.seededRandom(seed);
+            if (seed !== undefined) seed = this.nextSeed(seed);
+            z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+
+            z0 = z0 * (range / 3); 
+        } while (z0 < -range || z0 > range);
+
+        return Math.floor(mean + z0 + 0.5);
+    }
+
+    /**
      * 随机数字 ID
      * @param {Number} length 长度
      * @param {Number} seed 随机种子
@@ -267,11 +295,18 @@ class XuanSuPool {
         pool = {
             type: undefined,
             data: {},
+            modifier: undefined,
             ...pool
         }
         this.parent = parent;
         this.pool = pool;
         this.seed = seed;
+    }
+
+    __isPool(value = {}) {
+        if (typeof value !== 'object' || Array.isArray(value)) return false;
+        if (value?.is_pool !== true) return false
+        return true;
     }
 
     run(method = 'none', parameter = []) {
@@ -280,8 +315,14 @@ class XuanSuPool {
         }
         if (this.parent[method] === undefined) return;
         let par = []
+        let p;
         parameter.forEach(e => {
-            par.push(this.pool.data[e])
+            p = this.pool.data[e];
+            if (this.__isPool(p)) {
+                p = new XuanSuPool(this.parent, p, this.seed).getValue();
+                if (this.seed !== undefined) this.seed = this.parent.nextSeed(this.seed);
+            }
+            par.push(p);
         });
         return this.parent[method](...par, this.seed);
     }
@@ -289,6 +330,8 @@ class XuanSuPool {
     getValue() {
         const methodData = this.parent.getMethod(this.pool.type);
         if (methodData === undefined) return;
-        return this.run(methodData.method, methodData.parameter);
+        let r = this.run(methodData.method, methodData.parameter);
+        if (typeof this.pool.modifier === 'function') r = this.pool.modifier(r);
+        return r;
     }
 }
