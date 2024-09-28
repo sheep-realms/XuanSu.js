@@ -343,9 +343,9 @@ class XuanSu {
         }
 
         const block = [
-            ['class_a', 1,   126, 2147483520],
-            ['class_b', 128, 191, 1073709056],
-            ['class_c', 192, 223, 532676608],
+            ['class_a', 1,   126],
+            ['class_b', 128, 191],
+            ['class_c', 192, 223],
             ['after',   0,   255]
         ]
 
@@ -371,35 +371,6 @@ class XuanSu {
                 }
             }
         });
-
-        pool['class_c_2'] = {
-            type: 'weighted_choose',
-            data: {
-                value: [
-                    {
-                        value: {
-                            is_pool: true,
-                            type: 'int',
-                            data: {
-                                min: 0,
-                                max: 167
-                            }
-                        },
-                        weight: 168
-                    }, {
-                        value: {
-                            is_pool: true,
-                            type: 'int',
-                            data: {
-                                min: 169,
-                                max: 255
-                            }
-                        },
-                        weight: 86
-                    }
-                ]
-            }
-        }
 
         let pools = [];
 
