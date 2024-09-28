@@ -64,7 +64,7 @@ class XuanSu {
                 name: 'ipv4',
                 data: {
                     method: 'randomIPv4',
-                    parameter: ['attribute']
+                    parameter: ['options']
                 }
             }
         ];
@@ -72,6 +72,8 @@ class XuanSu {
         this.method = new Map();
         this.seed = undefined;
         this.seedCache = undefined;
+        this.loader = new XuanSuLoader(this);
+        this.launcher = new XuanSuLauncher(this);
 
         methodRegister.forEach(e => {
             this.method.set(e.name, e.data);
@@ -180,6 +182,9 @@ class XuanSu {
         return s;
     }
 
+    /**
+     * 清空随机种子
+     */
     clearSeed() {
         this.seed = undefined;
         this.seedCache = undefined;
@@ -380,19 +385,19 @@ class XuanSu {
 
     /**
      * 随机 IPv4 地址
-     * @param {Object} attribute 属性
-     * @param {Boolean} attribute.has_class_a 使用 A 类地址
-     * @param {Boolean} attribute.has_class_b 使用 B 类地址
-     * @param {Boolean} attribute.has_class_c 使用 C 类地址
+     * @param {Object} options 属性
+     * @param {Boolean} options.has_class_a 使用 A 类地址
+     * @param {Boolean} options.has_class_b 使用 B 类地址
+     * @param {Boolean} options.has_class_c 使用 C 类地址
      * @param {Number} seed 随机种子
      * @returns {String} 随机 IPv4 地址
      */
-    randomIPv4(attribute = {}, seed) {
-        attribute = {
+    randomIPv4(options = {}, seed) {
+        options = {
             has_class_a: true,
             has_class_b: true,
             has_class_c: true,
-            ...attribute
+            ...options
         }
 
         const block = [
@@ -449,9 +454,9 @@ class XuanSu {
             });
         }
 
-        if (attribute.has_class_a) __pushToPools('class_a');
-        if (attribute.has_class_b) __pushToPools('class_b');
-        if (attribute.has_class_c) __pushToPools('class_c');
+        if (options.has_class_a) __pushToPools('class_a');
+        if (options.has_class_b) __pushToPools('class_b');
+        if (options.has_class_c) __pushToPools('class_c');
 
         let p = {
             type: 'weighted_choose',
@@ -511,3 +516,164 @@ class XuanSuPool {
         return r;
     }
 }
+
+
+
+class XuanSuLoader {
+    constructor(parent) {
+        this.parent = parent;
+        this.path = '';
+    }
+
+    setPath(path) {
+        this.path = path;
+    }
+
+    load(url) {
+        let s = document.createElement('script');
+        s.src = this.path + url;
+        document.head.appendChild(s);
+    }
+}
+
+
+
+class XuanSuLauncher {
+    constructor(parent) {
+        this.parent = parent;
+        this.launchTasks = [];
+        this.lastTaskID = 0;
+    }
+
+    addTask(id, timer, resource, options = {}, requestOptions = {}, callback = () => {}) {
+        let data = {
+            id: id,
+            timer: timer,
+            resource: resource,
+            options: options,
+            requestOptions: requestOptions,
+            callback: callback
+        }
+        this.launchTasks.push(data);
+        return data;
+    }
+
+    findTaskIndex(id) {
+        return this.launchTasks.findIndex(e => e.id == id);
+    }
+
+    findTask(id) {
+        let r = this.launchTasks.filter(e => e.id == id);
+        if (r.length === 0) return;
+        return r[0];
+    }
+
+    stopTask(id) {
+        let r = this.findTask(id);
+        clearInterval(r.timer);
+        let i = this.findTaskIndex(id);
+        this.launchTasks.splice(i, 1);
+    }
+
+    launch(resource, options = {}, requestOptions = {}, callback = () => {}) {
+        options = {
+            body: [],
+            contentType: 'json',
+            limit: -1,
+            interval: 1000,
+            ...options
+        };
+        requestOptions = {
+            headers: {},
+            body: null,
+            method: 'GET',
+            ...requestOptions
+        };
+
+        let id = this.lastTaskID++;
+
+        let timer = setInterval(() => {
+            this.run(id);
+        }, options.interval)
+
+        this.addTask(id, timer, resource, options, requestOptions, callback);
+    }
+
+    run(id) {
+        let data = this.findTask(id);
+        let requestOptions = JSON.parse(JSON.stringify(data.requestOptions))
+        let search = new URLSearchParams();
+        let r;
+        data.options.body.forEach(e => {
+            if (e?.value !== undefined) {
+                search.append(e.name, e.value);
+            } else {
+                r = this.parent.random(e.pools);
+                search.append(e.name, r);
+            }
+        });
+
+        try {
+            if (requestOptions.method === 'GET') this.get(data.resource, search, requestOptions).them(data.callback);
+
+            let jsonData = {};
+
+            switch (data.options.contentType) {
+                case 'json':
+                    search.forEach((value, key) => {
+                        jsonData[key] = value
+                    });
+                    requestOptions = {
+                        body: JSON.stringify(jsonData)
+                    };
+                    this.post(data.resource, requestOptions);
+                    break;
+
+                case 'search':
+                    requestOptions = {
+                        body: search.toString()
+                    };
+                    this.post(data.resource, requestOptions);
+                    break;
+            
+                default:
+                    break;
+            }
+        } catch (error) {
+            
+        }
+
+        if (data.options.limit > 0) data.options.limit--;
+        if (data.options.limit == 0) this.stopTask(id);
+    }
+
+    send(resource, options) {
+        options = {
+            headers: {},
+            body: null,
+            method: 'GET',
+            ...options
+        };
+        return fetch(resource, options);
+    }
+
+    get(resource, search, options) {
+        options = {
+            method: 'GET',
+            ...options
+        };
+        return this.send(resource + '?' + search.toString(), options);
+    }
+
+    post(resource, options) {
+        options = {
+            method: 'POST',
+            ...options
+        };
+        return this.send(resource, options);
+    }
+}
+
+
+
+const xuansu = new XuanSu();
