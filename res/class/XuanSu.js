@@ -70,22 +70,40 @@ class XuanSu {
         ];
 
         this.method = new Map();
+        this.seed = undefined;
+        this.seedCache = undefined;
 
         methodRegister.forEach(e => {
             this.method.set(e.name, e.data);
         });
     }
 
+    /**
+     * 检查是否是随机池
+     * @param {Object} value 对象
+     * @returns {Boolean} 结果
+     */
     static isPool(value = {}) {
         if (typeof value !== 'object' || Array.isArray(value)) return false;
         if (value?.is_pool !== true) return false;
         return true;
     }
 
+    /**
+     * 获取随机方法数据
+     * @param {String} name 随机类型名
+     * @returns {Object} 随机方法数据
+     */
     getMethod(name) {
         return this.method.get(name);
     }
 
+    /**
+     * 运行随机池
+     * @param {Array<Object>|Object} pools 随机池数据
+     * @param {Number} seed 随机种子
+     * @returns {*} 随机结果
+     */
     random(pools = [], seed) {
         if (typeof pools !== 'object') return;
         if (!Array.isArray(pools)) pools = [pools];
@@ -109,13 +127,15 @@ class XuanSu {
         pools = pools2;
 
         // 构建
+        this.seed = seed;
         let value = '';
         let r;
         pools.forEach(e => {
             r = new XuanSuPool(this, e, seed).getValue();
             if (typeof r === 'number' || typeof r === 'string') value += r;
-            if (seed !== undefined) seed = this.nextSeed(seed);
         });
+
+        this.clearSeed();
 
         return value;
     }
@@ -126,13 +146,21 @@ class XuanSu {
      * @returns {Number} 0 ~ 1 之间的随机数
      */
     seededRandom(seed) {
-        if (seed === undefined) seed = Math.floor(Math.random() * 2 ** 32);
+        if (this.seedCache !== undefined) seed = this.seedCache;
+        if (seed === undefined) {
+            if (this.seed === undefined) {
+                seed = Math.floor(Math.random() * 2 ** 32);
+            } else {
+                seed = this.seed
+            }
+        }
 
         const a = 1664525;
         const c = 1013904223;
         const m = 2 ** 32;
 
         seed = (a * seed + c) % m;
+        this.seedCache = seed;
 
         return seed / m;
     }
@@ -143,10 +171,18 @@ class XuanSu {
      * @returns {Number} 随机种子
      */
     nextSeed(seed) {
+        if (seed === undefined && this.seedCache !== undefined) seed = this.seedCache;
         const a = 1664525;
         const c = 1013904223;
         const m = 2 ** 32;
-        return (a * seed + c) % m;
+        let s = (a * seed + c) % m;
+        this.seedCache = s;
+        return s;
+    }
+
+    clearSeed() {
+        this.seed = undefined;
+        this.seedCache = undefined;
     }
 
     /**
@@ -167,7 +203,6 @@ class XuanSu {
             if (randomNum < 0) {
                 let r = valueList[i].value;
                 if (XuanSu.isPool(r)) {
-                    if (this.seed !== undefined) this.seed = this.parent.nextSeed(this.seed);
                     r = new XuanSuPool(this, r, seed).getValue();
                 }
                 return r;
@@ -221,9 +256,7 @@ class XuanSu {
         let u1, u2, z0;
         do {
             u1 = this.seededRandom(seed);
-            if (seed !== undefined) seed = this.nextSeed(seed);
             u2 = this.seededRandom(seed);
-            if (seed !== undefined) seed = this.nextSeed(seed);
             z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
 
             z0 = z0 * (range / 3); 
@@ -244,7 +277,6 @@ class XuanSu {
         let str = '';
         for (let i = 0; i < length; i++) {
             str += this.randomInt(9, 0, seed);
-            if (seed !== undefined) seed = this.nextSeed(seed);
         }
         return str;
     }
@@ -270,11 +302,17 @@ class XuanSu {
         for (let i = 0; i < length; i++) {
             r = this.randomInt(max, min, seed);
             str += r.toString(max + 1);
-            if (seed !== undefined) seed = this.nextSeed(seed);
         }
         return str;
     }
 
+    /**
+     * 随机 UUID
+     * @param {Number} version UUID 版本号
+     * @param {Number} seed 随机种子
+     * @returns {String} 随机 UUID
+     * @description 请注意这并非真正的 UUID！
+     */
     randomUUID(version = 4, seed) {
         version = version || 4;
         return this.random(
@@ -310,6 +348,12 @@ class XuanSu {
         )
     }
 
+    /**
+     * 随机 QQ 号
+     * @param {Number} max 最大值
+     * @param {Number} seed 随机种子
+     * @returns {Number} 随机 QQ 号
+     */
     randomQQNumber(max = 4e9, seed) {
         max = max || 4e9;
         return this.random(
@@ -334,6 +378,15 @@ class XuanSu {
         );
     }
 
+    /**
+     * 随机 IPv4 地址
+     * @param {Object} attribute 属性
+     * @param {Boolean} attribute.has_class_a 使用 A 类地址
+     * @param {Boolean} attribute.has_class_b 使用 B 类地址
+     * @param {Boolean} attribute.has_class_c 使用 C 类地址
+     * @param {Number} seed 随机种子
+     * @returns {String} 随机 IPv4 地址
+     */
     randomIPv4(attribute = {}, seed) {
         attribute = {
             has_class_a: true,
@@ -415,6 +468,12 @@ class XuanSu {
 
 
 class XuanSuPool {
+    /**
+     * 随机池
+     * @param {XuanSu} parent 父级对象
+     * @param {Object} pool 随机池数据
+     * @param {Number} seed 随机种子
+     */
     constructor(parent, pool = {}, seed) {
         pool = {
             type: undefined,
@@ -438,7 +497,6 @@ class XuanSuPool {
             p = this.pool.data[e];
             if (XuanSu.isPool(p)) {
                 p = new XuanSuPool(this.parent, p, this.seed).getValue();
-                if (this.seed !== undefined) this.seed = this.parent.nextSeed(this.seed);
             }
             par.push(p);
         });
